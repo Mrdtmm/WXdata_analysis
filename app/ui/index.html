@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>微信聊天记录提取工具</title>
+  <link rel="stylesheet" href="/static/style.css?v=20261112-key-persist-1">
+</head>
+<body>
+  <main class="page">
+    <h1>微信聊天记录提取工具</h1>
+    <p class="subtitle">只在你这台电脑上运行，不联网、不上传任何内容。当前版本：P4 媒体与多格式导出。</p>
+
+    <section class="card">
+      <h2>第 1 步：选择数据目录并扫描</h2>
+      <p class="hint">选到「里面直接放着 wxid_ 开头账号文件夹」的那一层目录，不是账号文件夹本身。</p>
+      <div class="row">
+        <button id="folder-pick" type="button" class="folder-pick-btn">
+          <span class="folder-pick-icon" aria-hidden="true">📂</span>
+          选择文件夹路径（选到 wxid_ 的上一级）
+        </button>
+        <button id="scan-button" type="button">扫描</button>
+      </div>
+      <div class="row root-path-row">
+        <span class="root-path-label">当前路径</span>
+        <code id="root-display" class="root-path-display">尚未选择</code>
+      </div>
+      <div class="row">
+        <select id="root-select" aria-label="已配置的数据目录（快捷选择）"></select>
+      </div>
+      <input id="root-input" type="hidden">
+      <p id="scan-status" class="status"></p>
+      <div id="scan-errors" class="errors"></div>
+      <table id="account-table" class="hidden">
+        <thead>
+          <tr>
+            <th>选择</th>
+            <th>账号 wxid</th>
+            <th>昵称</th>
+            <th>账号目录体积</th>
+            <th>db_storage 最近修改</th>
+            <th>msg 体积</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody id="account-body"></tbody>
+      </table>
+      <p id="account-empty" class="hint">还没有扫描结果。点上面的「扫描」。</p>
+    </section>
+
+    <section class="card" id="key-card">
+      <h2>第 2 步：密钥</h2>
+      <p><span id="key-lamp" class="lamp lamp-off"></span><span id="key-status-text">未配置密钥</span></p>
+
+      <div id="saved-keys-panel" class="saved-keys-panel hidden">
+        <div class="saved-keys-grid">
+          <div class="saved-key-item">
+            <span class="saved-key-icon" aria-hidden="true">🔑</span>
+            <span class="saved-key-label">联系人密钥</span>
+            <span id="saved-contact-status" class="saved-key-status missing">未保存</span>
+          </div>
+          <div class="saved-key-item">
+            <span class="saved-key-icon" aria-hidden="true">📨</span>
+            <span class="saved-key-label">消息库密钥</span>
+            <span id="saved-message-status" class="saved-key-status missing">未保存</span>
+          </div>
+          <div class="saved-key-item">
+            <span class="saved-key-icon" aria-hidden="true">🖼️</span>
+            <span class="saved-key-label">媒体库密钥</span>
+            <span id="saved-media-status" class="saved-key-status missing">未保存</span>
+          </div>
+        </div>
+        <p id="saved-keys-hint" class="hint"></p>
+        <div class="row">
+          <button id="key-revalidate" type="button" class="secondary">验证已保存密钥</button>
+          <button id="key-reextract-toggle" type="button" class="secondary hidden">需要重新提取密钥？</button>
+        </div>
+      </div>
+
+      <div id="key-input-section">
+        <p class="hint">把 64 位十六进制密钥粘贴到下面。工具只会把这个账号的 contact.db 复制到本目录 cache/ 副本上试解密，不会修改微信原始文件。</p>
+        <div class="row">
+          <div class="key-input-wrap">
+            <input id="key-input" type="password" placeholder="粘贴 64 位十六进制密钥" autocomplete="off" spellcheck="false">
+            <button id="key-toggle" class="eye-button" type="button" aria-label="显示密钥" title="显示密钥">👁</button>
+          </div>
+          <button id="key-validate" type="button">校验密钥</button>
+        </div>
+        <p class="hint">也可以自己把密钥存成 keys\账号目录名.json（内容 {"key_hex": "..."}），校验通过后工具会记住。</p>
+        <div class="row key-actions">
+          <button id="memory-open" type="button">高级：微信进程与内存的密钥提取</button>
+          <button id="message-keys-open" type="button">为联系人列表准备消息库密钥（P2）</button>
+          <button id="media-keys-open" type="button" disabled>准备媒体库密钥（语音 / 表情排查）</button>
+        </div>
+        <p id="media-entry-hint" class="hint" role="status">媒体入口正在加载；若一直不可用，请刷新页面。</p>
+      </div>
+
+      <p id="key-result" class="status"></p>
+      <div id="key-detail" class="hint"></div>
+    </section>
+
+    <section class="card">
+      <h2>第 3 步：选择联系人</h2>
+      <p class="hint">生成新列表前请完全退出微信。工具会复制数据库到 cache/ 后解密；只处理主库，不合并 WAL，最近尚未写入主库的消息可能不在统计中。</p>
+      <div class="row">
+        <button id="contact-build" type="button" disabled>生成联系人列表</button>
+      </div>
+      <p id="contact-status" class="status">请先扫描并选择账号。</p>
+      <div id="contact-controls" class="contact-controls hidden">
+        <input id="contact-search" type="search" placeholder="搜索昵称、备注或 wxid" aria-label="搜索联系人">
+        <select id="contact-sort" aria-label="联系人排序">
+          <option value="last-desc">按最近消息排序</option>
+          <option value="first-asc">按最早消息排序</option>
+          <option value="count-desc">按消息数从多到少</option>
+          <option value="count-asc">按消息数从少到多</option>
+          <option value="name-asc">按昵称或备注排序</option>
+        </select>
+      </div>
+      <p id="contact-index-meta" class="hint"></p>
+      <p id="contact-selection" class="hint">还没有选择要导出的会话。</p>
+      <div class="table-scroll">
+        <table id="contact-table" class="hidden">
+          <thead>
+            <tr>
+              <th>选择</th>
+              <th>昵称</th>
+              <th>备注</th>
+              <th>wxid / 会话 ID</th>
+              <th>会话类型</th>
+              <th>消息总数</th>
+              <th>时间范围</th>
+            </tr>
+          </thead>
+          <tbody id="contact-body"></tbody>
+        </table>
+      </div>
+      <p id="contact-empty" class="hint hidden"></p>
+    </section>
+
+    <section class="card">
+      <h2>第 4 步：提取条件</h2>
+      <div class="option-group">
+        <label><input type="radio" name="date-mode" value="all" checked> 全部日期</label>
+        <label><input type="radio" name="date-mode" value="custom"> 自定义日期区间（包含开始和结束当天）</label>
+      </div>
+      <div id="custom-date" class="row hidden">
+        <label>开始日期 <input id="start-date" type="date"></label>
+        <label>结束日期 <input id="end-date" type="date"></label>
+      </div>
+      <ul class="options">
+        <li><input type="checkbox" checked disabled> 文本与消息记录：始终保留；未知类型保留原始内容。</li>
+        <li><label><input id="export-images" type="checkbox"> 图片：还原本地图片；没有本地文件或解码失败的会如实标注。</label></li>
+        <li><label><input id="export-emojis" type="checkbox"> 表情包 / GIF：目前仅检查已知本地候选，尚未支持加密表情还原；不联网下载。</label></li>
+        <li><label><input id="export-videos" type="checkbox"> 视频：复制本地仍保存的 MP4；没有视频文件时如实标注，不会把缩略图冒充视频。</label></li>
+        <li><label><input id="export-voices" type="checkbox"> 语音：已定位的载荷解码为 WAV 可直接播放；未定位的如实标注，不联网下载。</label></li>
+        <li><label><input id="export-files" type="checkbox"> 接收的文件：复制本地仍保存的文件；找不到或复制失败的会如实标注。</label></li>
+      </ul>
+      <div id="image-options" class="row hidden">
+        <label for="image-quality">图片画质</label>
+        <select id="image-quality">
+          <option value="best">优先高清，没有高清就用原图或缩略图</option>
+          <option value="thumb">优先缩略图，节省输出空间</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>第 5 步：开始提取</h2>
+      <p class="hint">至少选择一种格式，可以只导出一种，也可以同时导出多种。</p>
+      <div class="format-options">
+        <label><input class="export-format" type="checkbox" value="html" checked> HTML：双击查看，支持搜索</label>
+        <label><input class="export-format" type="checkbox" value="csv" checked> CSV：用 Excel 查看和筛选</label>
+        <label><input class="export-format" type="checkbox" value="jsonl" checked> JSONL：保留完整结构化字段和 raw</label>
+      </div>
+      <div class="row">
+        <button id="export-start" type="button" disabled>开始提取</button>
+        <button id="export-cancel" class="secondary hidden" type="button">取消</button>
+        <button id="export-open" class="secondary hidden" type="button">打开输出文件夹</button>
+      </div>
+      <progress id="export-progress" class="hidden" max="100" value="0"></progress>
+      <p id="export-status" class="status">请先选择会话和导出格式。</p>
+      <p id="export-output" class="hint"></p>
+    </section>
+  </main>
+
+  <dialog id="memory-dialog" aria-labelledby="memory-title">
+    <h2 id="memory-title" tabindex="-1">从微信内存获取密钥</h2>
+    <p id="memory-account" class="status" role="status"></p>
+    <p class="risk-text">这是非官方的进程内存读取，可能触发微信风控。只读扫描不会注入或修改微信，但不能保证账号零风险。</p>
+    <p class="hint">无需配置账号允许列表。请先自行断开网络，并确认微信当前登录的是页面所选账号；工具不会替你操作网卡。仅操作你有权访问的账号。</p>
+    <div id="media-scope-notice" class="hidden">
+      <p class="hint">本次仅准备所选账号现存的 media_数字.db、message_resource.db、hardlink.db、emoticon.db。仍使用原第三方工具的 extract 接口，不注入、不修改默认参数。取得密钥后退出微信，离线导出时语音可解码为 WAV 播放；表情尚未完成还原。</p>
+      <label class="confirm-row"><input id="media-scope-confirm" type="checkbox"> 我同意本次密钥提取范围扩展到以上媒体库</label>
+    </div>
+    <label class="confirm-row"><input id="offline-confirm" type="checkbox"> 我已自行断开网络</label>
+    <label class="confirm-row"><input id="risk-confirm" type="checkbox"> 我了解账号风险，并确认有权提取当前所选账号的数据</label>
+    <div class="row">
+      <button id="memory-scan" type="button" disabled>检测并自动提取密钥</button>
+    </div>
+    <p id="memory-status" class="status"></p>
+    <table id="process-table" class="hidden">
+      <thead><tr><th>主进程 PID</th><th>进程数</th><th>窗口标题</th><th>启动时间</th><th>对应账号</th></tr></thead>
+      <tbody id="process-body"></tbody>
+    </table>
+    <p class="hint">单个微信登录通常包含多个子进程，工具按进程树归为一个实例。检测到多个登录实例时会直接停止，不会尝试提取。</p>
+    <div class="dialog-actions">
+      <button id="memory-close" class="secondary" type="button">关闭</button>
+    </div>
+  </dialog>
+
+  <dialog id="folder-dialog" aria-labelledby="folder-title">
+    <div class="folder-header">
+      <h2 id="folder-title">选择数据目录</h2>
+      <p class="hint">导航到里面直接放着 wxid_ 账号文件夹的那一层，然后点「选择此文件夹」。</p>
+    </div>
+    <nav id="folder-breadcrumb" class="folder-breadcrumb" aria-label="目录路径"></nav>
+    <div id="folder-drives" class="folder-drives"></div>
+    <div id="folder-wxid-banner" class="folder-wxid-banner hidden"></div>
+    <div id="folder-list" class="folder-list" role="listbox" aria-label="子文件夹"></div>
+    <p id="folder-status" class="folder-status"></p>
+    <div class="folder-footer">
+      <code id="folder-current" class="folder-current"></code>
+      <div class="dialog-actions">
+        <button id="folder-cancel" class="secondary" type="button">取消</button>
+        <button id="folder-select" type="button">选择此文件夹</button>
+      </div>
+    </div>
+  </dialog>
+  <script src="/static/app.js?v=20261112-key-persist-1"></script>
+</body>
+</html>

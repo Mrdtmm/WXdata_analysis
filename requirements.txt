@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn>=0.30
+PyYAML>=6.0
+cryptography>=43.0
+zstandard>=0.23
+av>=12
+pilk>=0.2.4

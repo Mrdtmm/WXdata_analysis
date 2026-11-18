@@ -1,0 +1,11 @@
+# 本文件是机器相关配置，随程序走，不进版本库。
+# 微信 4.x 数据根目录：指的是"里面直接放着 <wxid>_<hash> 账号目录"的那一层。
+# 只支持微信 4.x，不支持 3.x 的 WeChat Files 目录。
+wechat_data_roots:
+  - "D:\\WeChat Files"  # 微信聊天记录储存位置
+
+server:
+  # 只允许本机回环地址，代码里会强制覆盖，不要改成 0.0.0.0
+  host: "127.0.0.1"
+  port: 8765
+  open_browser: true
